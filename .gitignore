@@ -1,0 +1,12 @@
+.*
+!.gitignore
+!.gitkeep
+
+
+*.jpg
+*.avi
+*.png
+*.xlsx
+*.vcxproj*
+x64/
+*.csv
