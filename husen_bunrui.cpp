@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <random>
 #include <math.h>
 #include "opencv2\core\core.hpp"
 #include "opencv2\highgui\highgui.hpp"
@@ -54,9 +55,13 @@ int checkAsData(vector<vector<vector<vector<int>>>>*all_A_,
 double calcF(vector<vector<int>>, vector<vector<int>>, int);
 double calcFp(vector<vector<int>>, vector<vector<int>>, int);
 double calcP(vector<vector<int>>, vector<vector<int>>, int);
+int shuffle(int * array, int size);
 double calcR(vector<vector<int>>, vector<vector<int>>, int);
 int mitukeru(int, vector<vector<int>>);
+int learn_test_dbscan(vector<int> learn, vector<int> test, vector<vector<vector<vector<int>>>> all_A, vector<vector<vector<Point2f>>> all_husen_center_data, vector<vector<vector<vector<Point>>>> all_husen_points_data, FILE * output_file, FILE * output_file2, int count);
+int learn_test_dbscan_kyori_kakudo(vector<int> learn, vector<int> test, vector<vector<vector<vector<int>>>> all_A, vector<vector<vector<Point2f>>> all_husen_center_data, vector<vector<vector<vector<Point>>>> all_husen_points_data, FILE * output_file, FILE * output_file2, int count);
 template <class X> X modo(X* start, int size);
+
 
 
 int main()
@@ -72,7 +77,75 @@ int main()
 	const int nsample = 10;
 	FILE *fp;
 	FILE * output_file;
-
+	FILE * output_files[4];
+	fopen_s(&output_files[0], "0710dbscanall_group.csv", "w");
+	fopen_s(&output_files[1], "0710dbscan_group.csv", "w");
+	fopen_s(&output_files[2], "0710dbscan_kk_all_group.csv", "w");
+	fopen_s(&output_files[3], "0710dbscan_kk_group.csv", "w");
+	FILE * output_files2[4];
+	fopen_s(&output_files2[0], "0710dbscanall_id.csv", "w");
+	fopen_s(&output_files2[1], "0710dbscan_id.csv", "w");
+	fopen_s(&output_files2[2], "0710dbscan_kk_all_id.csv", "w");
+	fopen_s(&output_files2[3], "0710dbscan_kk_id.csv", "w");
+	/*
+	int count;
+	for (count = 0; count < 100; count++) {
+		int values[40];
+		for (i = 0; i < 40; i++) {
+			values[i] = i;
+		}
+		int c = shuffle(values, 40);
+		vector<int>learn;
+		vector<int>test;
+		for (i = 0; i < 20; i++) {
+			learn.push_back(values[i]);
+		}
+		for (i = 0; i < 20; i++) {
+			test.push_back(values[20 + i]);
+		}
+		learn_test_dbscan(learn, test, all_A, all_husen_center_data, all_husen_points_data, output_files[0], output_files[1], count);
+		learn_test_dbscan_kyori_kakudo(learn, test, all_A, all_husen_center_data, all_husen_points_data, output_files[2], output_files[3], count);
+	}
+	*/
+	//*
+	int group;
+	for(group = 0; group < 4; group++) {
+		vector<int>learn;
+		vector<int>test;
+		for (i = 0; i < 40; i++) {
+			int numGroup = i / 10;
+			int numId = i % 10;
+			if (numGroup == group) {
+				learn.push_back(i);
+			}
+			else {
+				test.push_back(i);
+			}
+		}
+		learn_test_dbscan(learn, test, all_A, all_husen_center_data, all_husen_points_data, output_files[0], output_files[1], group);
+		learn_test_dbscan_kyori_kakudo(learn, test, all_A, all_husen_center_data, all_husen_points_data, output_files[2], output_files[3], group);
+	}
+	//*/
+	//*
+	int Id;
+	for (Id = 0; Id < 10; Id++) {
+		vector<int>learn;
+		vector<int>test;
+		for (i = 0; i < 40; i++) {
+			int numGroup = i / 10;
+			int numId = i % 10;
+			if (numId == Id) {
+				learn.push_back(i);
+			}
+			else {
+				test.push_back(i);
+			}
+		}
+		learn_test_dbscan(learn, test, all_A, all_husen_center_data, all_husen_points_data, output_files2[0], output_files2[1], Id);
+		learn_test_dbscan_kyori_kakudo(learn, test, all_A, all_husen_center_data, all_husen_points_data, output_files2[2], output_files2[3], Id);
+	}
+	//*/
+	return 0;
 	////pair 3parameter
 	//int ccc = 0;
 	//fopen_s(&fp, "3paraplot0619tikainodake.csv", "w");
@@ -212,10 +285,7 @@ double max_eps = 80;
 double deps = 0.2;
 double eps;
 
-	
-
 vector<double> vec_good_eps;
-int group;
 	for (group = 0; group < ngroup; group++){
 		double max_sum_f = 0;
 		double good_eps = 0;
@@ -1247,6 +1317,139 @@ int mitukeru(int id, vector<vector<int>> C)
 	}
 	return C.size() + 1;
 }
+int learn_test_dbscan(vector<int> learn, vector<int> test, vector<vector<vector<vector<int>>>> all_A, vector<vector<vector<Point2f>>> all_husen_center_data, vector<vector<vector<vector<Point>>>> all_husen_points_data, FILE *output_file, FILE* output_file2, int count) {
+	//learning
+	int nl;
+	double eps;
+	double minEps = 60;
+	double maxEps = 90;
+	double dEps = 0.5;
+	double maxSumF = 0;
+	double maxSumP = 0;
+	double maxSumR = 0;
+	double goodeps = 0;
+
+	for (eps = minEps; eps <= maxEps; eps += dEps) {
+		double sumF = 0;
+		double sumP = 0;
+		double sumR = 0;
+		for (nl = 0; nl < learn.size(); nl++) {
+			int num = learn[nl];
+			int numGroup = num / 10;
+			int numId = num % 10;
+			vector<Point2f>husen_center = all_husen_center_data[numGroup][numId];
+			int nData = husen_center.size();
+			vector<vector<int>> C = dbscan(husen_center, eps);
+			vector<vector<int>>A = all_A[numGroup][numId];
+			double F = calcFp(A, C, nData);
+			double p = calcP(A, C, husen_center.size());
+			double r = calcR(A, C, husen_center.size());
+			sumF += F;
+			sumP += p;
+			sumR += r;
+		}
+		if (maxSumF < sumF) {
+			maxSumF = sumF;
+			maxSumP = sumP;
+			maxSumR = sumR;
+			goodeps = eps;
+		}
+	}
+
+	//test
+	int nt;
+	double sumF = 0;
+	double sumP = 0;
+	double sumR = 0;
+	for (nt = 0; nt < test.size(); nt++) {
+		int num = test[nt];
+		int numGroup = num / 10;
+		int numId = num % 10;
+		vector<Point2f>husen_center = all_husen_center_data[numGroup][numId];;
+		vector<vector<int>> C = dbscan(husen_center, goodeps);
+		vector<vector<int>>A = all_A[numGroup][numId];
+		int nData = husen_center.size();
+		double F = calcFp(A, C, nData);
+		double p = calcP(A, C, nData);
+		double r = calcR(A, C, nData);
+		sumF += F;
+		sumP += p;
+		sumR += r;
+		fprintf_s(output_file, "%d,3,%d,%d,%d,%lf,%lf,%lf\n", count, numGroup + 1, numId + 1, C.size(), p, r, F);
+	}
+	fprintf_s(output_file2, "%d,3,%lf,%lf,%lf,%lf,%lf,%lf\n", count, maxSumP / learn.size(), maxSumR / learn.size(), maxSumF / learn.size(), sumP / test.size(), sumR / test.size(), sumF / test.size());
+	printf("%d,3,%lf,%lf,%lf,%lf,%lf,%lf\n", count, maxSumP / learn.size(), maxSumR / learn.size(), maxSumF / learn.size(), sumP / test.size(), sumR / test.size(), sumF / test.size());
+	return 0;
+}
+int learn_test_dbscan_kyori_kakudo(vector<int> learn, vector<int> test, vector<vector<vector<vector<int>>>> all_A, vector<vector<vector<Point2f>>> all_husen_center_data, vector<vector<vector<vector<Point>>>> all_husen_points_data, FILE *output_file, FILE* output_file2, int count)
+{
+	//learning
+	int nl;
+	vector<double>epss(3);
+	double minEps = 60;
+	double maxEps = 90;
+	double dEps = 0.5;
+	double maxSumF = 0;
+	double maxSumP = 0;
+	double maxSumR = 0;
+	vector<double>goodepss(3);
+	for (epss[0] = 65; epss[0] <= 88; epss[0] += dEps) {
+		for (epss[1] = 65; epss[1] <= 88; epss[1] += dEps) {
+			for (epss[2] = 60; epss[2] <= 70; epss[2] += dEps) {
+				double sumF = 0;
+				double sumP = 0;
+				double sumR = 0;
+				for (nl = 0; nl < learn.size(); nl++) {
+					int num = learn[nl];
+					int numGroup = num / 10;
+					int numId = num % 10;
+					vector<vector<Point>>husen_data = all_husen_points_data[numGroup][numId];
+					vector<vector<int>> C = dbscan_kyori_kakudo(husen_data, epss);
+					vector<vector<int>>A = all_A[numGroup][numId];
+					double F = calcFp(A, C, husen_data.size());
+					double p = calcP(A, C, husen_data.size());
+					double r = calcR(A, C, husen_data.size());
+					sumF += F;
+					sumP += p;
+					sumR += r;
+				}
+				if (maxSumF < sumF) {
+					maxSumF = sumF;
+					maxSumP = sumP;
+					maxSumR = sumR;
+					goodepss[0] = epss[0];
+					goodepss[1] = epss[1];
+					goodepss[2] = epss[2];
+				}
+			}
+		}
+	}
+
+	//test
+	int nt;
+	double sumF = 0;
+	double sumP = 0;
+	double sumR = 0;
+	for (nt = 0; nt < test.size(); nt++) {
+		int num = test[nt];
+		int numGroup = num / 10;
+		int numId = num % 10;
+		vector<vector<Point>>husen_data = all_husen_points_data[numGroup][numId];
+		vector<vector<int>> C = dbscan_kyori_kakudo(husen_data, goodepss);
+		vector<vector<int>>A = all_A[numGroup][numId];
+		int nData = husen_data.size();
+		double F = calcFp(A, C, nData);
+		double p = calcP(A, C, nData);
+		double r = calcR(A, C, nData);
+		sumP += p;
+		sumR += r;
+		sumF += F;
+		fprintf_s(output_file, "%d,4,%d,%d,%d,%lf,%lf,%lf\n", count, numGroup + 1, numId + 1, C.size(), p, r, F);
+	}
+	fprintf_s(output_file2, "%d,4,%lf,%lf,%lf,%lf,%lf,%lf\n", count, maxSumP / learn.size(), maxSumR / learn.size(), maxSumF / learn.size(),sumP / test.size() , sumR / test.size(),sumF / test.size());
+	printf("%d,4,%lf,%lf,%lf,%lf,%lf,%lf\n", count, maxSumP / learn.size(), maxSumR / learn.size(), maxSumF / learn.size(), sumP / test.size(), sumR / test.size(), sumF / test.size());
+	return 0;
+}
 double calcP(vector<vector<int>> A, vector<vector<int>>C, int N) {
 	vector<vector<int>>X = calc_cross(A, C);
 	//double entropy = calc_entropy(X, N);
@@ -1254,6 +1457,22 @@ double calcP(vector<vector<int>> A, vector<vector<int>>C, int N) {
 	double P = calc_P(X, N);
 	return P;
 
+}
+int shuffle(int * array, int size)
+{
+	std::random_device rnd;
+	int count = 0;
+	int i = size;
+	while (i > 1) {
+		int j = rnd() % i;
+		i--;
+		count++;
+		int t = array[i];
+		array[i] = array[j];
+		array[j] = t;
+	}
+	return count;
+	return 0;
 }
 
 template <class X> X modo(X* start, int size) {
